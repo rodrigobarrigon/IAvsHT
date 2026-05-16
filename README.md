@@ -32,17 +32,17 @@ IAvsHT/
 ├── requirements.txt
 │
 ├── 1_preprocessing/
-│   ├── IAvsHT_Creation_Split.py       # Stratified train/val split generation
-│   └── IAvsHT_Validation_Split.py     # Statistical validation of the split
+│   ├── IAvsHT_Creation_Split.py               # Stratified train/val split generation
+│   └── IAvsHT_Validation_Split.py             # Statistical validation of the split
 │
 ├── 2_statistical_analysis/
-│   ├── IAvsHT_test_norm_homoces.py    # Normality and homoscedasticity tests
-│   └── IAvsHT_Statistical_Analysis.py # Inter-cohort statistical comparisons and global classifier ranking
+│   ├── IAvsHT_Normality_Homoscedasticity.py   # Normality and homoscedasticity tests
+│   └── IAvsHT_Statistical_Analysis.py         # Inter-cohort statistical comparisons and global classifier ranking
 │
 └── 3_models/
-    ├── IAvsHT_local.py                # Local training and validation strategy
-    ├── IAvsHT_mixed.py                # Mixed (pooled) partitioning strategy
-    └── IAvsHT_LOCO.py                 # Leave-One-Center-Out strategy
+    ├── IAvsHT_local.py                        # Local training and validation strategy
+    ├── IAvsHT_mixed.py                        # Mixed (pooled) partitioning strategy
+    └── IAvsHT_LOCO.py                         # Leave-One-Center-Out strategy
 ```
 
 ---
@@ -100,7 +100,7 @@ python 1_preprocessing/IAvsHT_Creation_Split.py
 python 1_preprocessing/IAvsHT_Validation_Split.py
 
 # Step 3 — Normality and homoscedasticity tests
-python 2_statistical_analysis/IAvsHT_test_norm_homoces.py
+python 2_statistical_analysis/IAvsHT_Normality_Homoscedasticity.py
 
 # Step 4 — Run the desired modelling strategy
 python 3_models/IAvsHT_local.py
