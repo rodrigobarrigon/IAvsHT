@@ -6,10 +6,16 @@
 #   Sheet 1 · Descriptive_Table        — descriptive statistics per class and cohort
 #                                         · continuous variables: median [IQR]
 #                                         · binary variables: count (%)
+#                                         · ordinal variables (Distal vessels quality,
+#                                           Number of valves affected): count (%) per category
 #   Sheet 2 · Inter_Cohort_Comparison  — Kruskal-Wallis across 5 cohorts per class
 #                                         + Mann-Whitney post-hoc for all C(5,2)=10 pairs
+#                                         · ordinal variables (Distal vessels quality,
+#                                           Number of valves affected) are binarized
+#                                           per category prior to testing (Chi-squared)
 #   Sheet 3 · P_Values                 — intra-class significance per cohort
-#                                         (Mann-Whitney for continuous, Chi-squared for binary)
+#                                         (Mann-Whitney for continuous, Chi-squared for binary
+#                                          and binarized ordinal categories)
 #   Sheet 4 · Spearman_Correlation     — Spearman ρ of each variable with:
 #                                         (a) ground truth label, (b) Heart Team decision
 #   Sheet 5 · Global_Ranking           — Borda count across 6 individual rankings
@@ -163,6 +169,26 @@ VARIABLES = [
     ("Other with CPB",                                      "OTROS CON CEC",                               "bin"),
 ]
 
+ORDINAL_VARS = {
+    "LECHOS DISTALES (0=buenos, 1=regular, 2= malos)": {
+        "labels": [
+            "0 — Distal vessels in good condition",
+            "1 — Distal vessels in intermediate condition",
+            "2 — Distal vessels in poor condition"
+        ],
+        "values": [0, 1, 2]
+    },
+    "Nº VÁLVULAS (0,1,2,3)": {
+        "labels": [
+            "0 valves affected",
+            "1 valve affected",
+            "2 valves affected",
+            "3 valves affected"
+        ],
+        "values": [0, 1, 2, 3]
+    }
+}
+
 # ════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ════════════════════════════════════════════════════════════════════════════
@@ -244,6 +270,79 @@ def format_p(p):
         return "N/A"
     return "< 0.001 *" if p < 0.001 else (f"{p:.3f} *" if p < 0.05 else f"{p:.3f}")
 
+def ordinal_freq(df_subset, col_name, value):
+    real_col = find_col(df_subset, col_name)
+    if real_col is None:
+        return "N/A"
+    s = pd.to_numeric(df_subset[real_col], errors='coerce').dropna()
+    if s.empty:
+        return "N/A"
+    n = int((s == value).sum())
+    pct = (s == value).mean() * 100
+    return f"{n} ({pct:.1f}%)"
+
+def intraclass_pvalue_binary(df, col_name, cat_value):
+    """Chi-squared test for a binarized ordinal category (value == cat_value vs rest)."""
+    if df.empty:
+        return "N/A", np.nan
+    real_col = find_col(df, col_name)
+    if real_col is None:
+        return "N/A", np.nan
+    s = pd.to_numeric(df[real_col], errors='coerce').dropna()
+    if s.empty:
+        return "N/A", np.nan
+    binary = (s == cat_value).astype(int)
+    labels = df.loc[binary.index, 'ETIQUETA']
+    try:
+        table = pd.crosstab(binary, labels)
+        if table.shape != (2, 2):
+            return "N/A", np.nan
+        _, p, _, _ = chi2_contingency(table, correction=False)
+    except Exception:
+        return "N/A", np.nan
+    if np.isnan(p):
+        return "N/A", np.nan
+    label = "< 0.001 *" if p < 0.001 else (f"{p:.3f} *" if p < 0.05 else f"{p:.3f}")
+    return label, p
+
+
+def kw_binarized_posthoc(col_name, cat_value, target_class):
+    """KW + post-hoc MW for a binarized ordinal category across cohorts."""
+    groups = []
+    for _, df in COHORTS:
+        real_col = find_col(df, col_name)
+        if real_col is None:
+            groups.append(np.array([]))
+            continue
+        s = pd.to_numeric(df[df['ETIQUETA'] == target_class][real_col], errors='coerce').dropna()
+        groups.append((s == cat_value).astype(int).values)
+    valid = [(i, g) for i, g in enumerate(groups) if len(g) >= 1]
+    if len(valid) < 2:
+        return "N/A", np.nan, {}
+    with_variance = [(i, g) for i, g in valid if len(np.unique(g)) > 1]
+    if len(with_variance) < 2:
+        return "1.000", 1.0, {}
+    try:
+        _, kw_p = kruskal(*[g for _, g in valid])
+    except Exception:
+        return "N/A", np.nan, {}
+    if np.isnan(kw_p):
+        return "N/A", np.nan, {}
+    kw_label = format_p(kw_p)
+    posthoc = {}
+    if kw_p < ALPHA:
+        for i, j in COHORT_PAIRS:
+            gi, gj = groups[i], groups[j]
+            if len(gi) < 1 or len(gj) < 1:
+                posthoc[(i, j)] = "N/A"
+                continue
+            try:
+                _, p_mw = mannwhitneyu(gi, gj, alternative='two-sided')
+                posthoc[(i, j)] = format_p(p_mw)
+            except Exception:
+                posthoc[(i, j)] = "N/A"
+    return kw_label, kw_p, posthoc
+
 # ════════════════════════════════════════════════════════════════════════════
 # SHEET 1 — DESCRIPTIVE TABLE
 # ════════════════════════════════════════════════════════════════════════════
@@ -262,8 +361,18 @@ DESC_COLS = [
 rows_desc = []
 for label, col, vtype in VARIABLES:
     if vtype is None:
-        # Section header row — single label, remaining cells empty
         rows_desc.append([f"── {label} ──"] + [""] * 10)
+    elif col in ORDINAL_VARS:
+        ord_info = ORDINAL_VARS[col]
+        for cat_label, cat_val in zip(ord_info["labels"], ord_info["values"]):
+            rows_desc.append([
+                f"  {label} — {cat_label} — N (%)",
+                ordinal_freq(train_0, col, cat_val), ordinal_freq(train_1, col, cat_val),
+                ordinal_freq(val_0,   col, cat_val), ordinal_freq(val_1,   col, cat_val),
+                ordinal_freq(vall_0,  col, cat_val), ordinal_freq(vall_1,  col, cat_val),
+                ordinal_freq(sala_0,  col, cat_val), ordinal_freq(sala_1,  col, cat_val),
+                ordinal_freq(gran_0,  col, cat_val), ordinal_freq(gran_1,  col, cat_val),
+            ])
     else:
         suffix = " (Median [IQR])" if vtype == "cont" else " — N (%)"
         rows_desc.append([
@@ -374,19 +483,25 @@ for label, col, vtype in VARIABLES:
     if vtype is None:
         rows_kw.append([f"── {label} ──"] + [""] * (len(KW_COLS) - 1))
         continue
-
-    kw_lbl0, kw_p0, ph0 = kw_and_posthoc(col, target_class=0)
-    kw_lbl1, kw_p1, ph1 = kw_and_posthoc(col, target_class=1)
-
-    suffix = " (Median [IQR])" if vtype == "cont" else " — N (%)"
-    row = [label + suffix, kw_lbl0, kw_lbl1]
-
-    for i, j in COHORT_PAIRS:
-        # Post-hoc cells are filled only when KW was significant; otherwise a dash is shown
-        row.append(ph0.get((i, j), "–") if kw_p0 < ALPHA else "–")
-        row.append(ph1.get((i, j), "–") if kw_p1 < ALPHA else "–")
-
-    rows_kw.append(row)
+    if col in ORDINAL_VARS:
+        ord_info = ORDINAL_VARS[col]
+        for cat_label, cat_val in zip(ord_info["labels"], ord_info["values"]):
+            kw_lbl0, kw_p0, ph0 = kw_binarized_posthoc(col, cat_val, 0)
+            kw_lbl1, kw_p1, ph1 = kw_binarized_posthoc(col, cat_val, 1)
+            row = [f"  {label} — {cat_label} — N (%)", kw_lbl0, kw_lbl1]
+            for i, j in COHORT_PAIRS:
+                row.append(ph0.get((i, j), "–") if kw_p0 < ALPHA else "–")
+                row.append(ph1.get((i, j), "–") if kw_p1 < ALPHA else "–")
+            rows_kw.append(row)
+    else:
+        kw_lbl0, kw_p0, ph0 = kw_and_posthoc(col, target_class=0)
+        kw_lbl1, kw_p1, ph1 = kw_and_posthoc(col, target_class=1)
+        suffix = " (Median [IQR])" if vtype == "cont" else " — N (%)"
+        row = [label + suffix, kw_lbl0, kw_lbl1]
+        for i, j in COHORT_PAIRS:
+            row.append(ph0.get((i, j), "–") if kw_p0 < ALPHA else "–")
+            row.append(ph1.get((i, j), "–") if kw_p1 < ALPHA else "–")
+        rows_kw.append(row)
 
 df_kw = pd.DataFrame(rows_kw, columns=KW_COLS)
 
@@ -404,11 +519,19 @@ PVAL_DATASETS = [
 ]
 
 PVAL_COLS = ["Clinical variable"] + [f"p-value {n}" for n, _ in PVAL_DATASETS]
-rows_pval = []
 
+rows_pval = []
 for label, col, vtype in VARIABLES:
     if vtype is None:
         rows_pval.append([f"── {label} ──"] + [""] * len(PVAL_DATASETS))
+    elif col in ORDINAL_VARS:
+        ord_info = ORDINAL_VARS[col]
+        for cat_label, cat_val in zip(ord_info["labels"], ord_info["values"]):
+            row = [f"  {label} — {cat_label}"]
+            for _, df in PVAL_DATASETS:
+                lbl, _ = intraclass_pvalue_binary(df, col, cat_val)
+                row.append(lbl)
+            rows_pval.append(row)
     else:
         row = [label]
         for _, df in PVAL_DATASETS:
