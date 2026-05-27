@@ -1,4 +1,4 @@
-##############################################################################
+############################################################################################################################################################
 # IAvsHT — Statistical Analysis
 # ─────────────────────────────────────────────────────────────────────────────
 # Generates a multi-sheet Excel report and associated figures covering:
@@ -18,7 +18,14 @@
 #                                          and binarized ordinal categories)
 #   Sheet 4 · Spearman_Correlation     — Spearman ρ of each variable with:
 #                                         (a) ground truth label, (b) Heart Team decision
-#   Sheet 5 · Global_Ranking           — Borda count across 6 individual rankings
+#   Sheet 5 · Angioplasty_Subgroup     — subgroup analysis: Suitable for Angioplasty ×
+#                                         coronary disease extent (single-, two-, three-vessel,
+#                                         left main). Quantifies whether HT vs Ground Truth
+#                                         divergence (Δ) concentrates in high-complexity
+#                                         anatomy where CABG is evidence-preferred over PCI.
+#                                         Ref: SYNTAX trial (Mohr et al., Lancet 2013);
+#                                              NOBLE trial (Holm et al., Lancet 2020)
+#   Sheet 6 · Global_Ranking           — Borda count across 6 individual rankings
 #                                         (Local, Mixed, LOCO × 4 cohorts)
 #
 # Figures generated (saved as PNG, 300 dpi):
@@ -31,7 +38,7 @@
 # Input:  IAvsHT_VALLADOLID_2023.xlsx  (sheets: Train, Val, Validation_Split)
 #         IAvsHT_VALLADOLID_2025.xlsx · IAvsHT_GRANADA.xlsx · IAvsHT_SALAMANCA.xlsx
 #         Ranking_global_TFG.xlsx      (sheets: Local, Mixed, LOCO)
-# Output: Analisis_estadistico_TFG.xlsx
+# Output: IAvsHT_Statistical_Analysis.xlsx
 ##############################################################################
 
 import pandas as pd
@@ -46,11 +53,11 @@ OUTPUT_FILE = 'IAvsHT_Statistical_Analysis.xlsx'
 
 # ── Input files ───────────────────────────────────────────────────────────────
 
-FILE_VLD_2023 = 'IAvsHT_VALLADOLID_2023.xlsx'   # Valladolid 2023 cohort (N=702)
-FILE_VLD_2025 = 'IAvsHT_VALLADOLID_2025.xlsx'   # Valladolid 2025 external test cohort (N=150)
-FILE_SALAMANCA = 'IAvsHT_SALAMANCA.xlsx'         # Salamanca external test cohort (N=162)
-FILE_GRANADA   = 'IAvsHT_GRANADA.xlsx'           # Granada external test cohort (N=150)
-RANKING_EXCEL  = 'Ranking_global_TFG.xlsx'       # Pre-computed per-methodology classifier rankings
+FILE_VLD_2023  = 'IAvsHT_VALLADOLID_2023.xlsx'   # Valladolid 2023 cohort (N=702)
+FILE_VLD_2025  = 'IAvsHT_VALLADOLID_2025.xlsx'   # Valladolid 2025 external test cohort (N=150)
+FILE_SALAMANCA = 'IAvsHT_SALAMANCA.xlsx'          # Salamanca external test cohort (N=162)
+FILE_GRANADA   = 'IAvsHT_GRANADA.xlsx'            # Granada external test cohort (N=150)
+RANKING_EXCEL  = 'Ranking_global_TFG.xlsx'        # Pre-computed per-methodology classifier rankings
 
 ALPHA = 0.05   # Significance level used throughout the analysis
 
@@ -270,6 +277,7 @@ def format_p(p):
         return "N/A"
     return "< 0.001 *" if p < 0.001 else (f"{p:.3f} *" if p < 0.05 else f"{p:.3f}")
 
+
 def ordinal_freq(df_subset, col_name, value):
     real_col = find_col(df_subset, col_name)
     if real_col is None:
@@ -277,9 +285,10 @@ def ordinal_freq(df_subset, col_name, value):
     s = pd.to_numeric(df_subset[real_col], errors='coerce').dropna()
     if s.empty:
         return "N/A"
-    n = int((s == value).sum())
+    n   = int((s == value).sum())
     pct = (s == value).mean() * 100
     return f"{n} ({pct:.1f}%)"
+
 
 def intraclass_pvalue_binary(df, col_name, cat_value):
     """Chi-squared test for a binarized ordinal category (value == cat_value vs rest)."""
@@ -329,7 +338,7 @@ def kw_binarized_posthoc(col_name, cat_value, target_class):
     if np.isnan(kw_p):
         return "N/A", np.nan, {}
     kw_label = format_p(kw_p)
-    posthoc = {}
+    posthoc  = {}
     if kw_p < ALPHA:
         for i, j in COHORT_PAIRS:
             gi, gj = groups[i], groups[j]
@@ -351,11 +360,11 @@ print("\nGenerating descriptive table...")
 # One column per class per cohort
 DESC_COLS = [
     "Clinical variable",
-    f"TRAIN No surgery (N={len(train_0)})",  f"TRAIN Surgery (N={len(train_1)})",
-    f"VAL No surgery (N={len(val_0)})",       f"VAL Surgery (N={len(val_1)})",
-    f"VALLADOLID No surgery (N={len(vall_0)})", f"VALLADOLID Surgery (N={len(vall_1)})",
-    f"SALAMANCA No surgery (N={len(sala_0)})", f"SALAMANCA Surgery (N={len(sala_1)})",
-    f"GRANADA No surgery (N={len(gran_0)})",  f"GRANADA Surgery (N={len(gran_1)})",
+    f"TRAIN No surgery (N={len(train_0)})",     f"TRAIN Surgery (N={len(train_1)})",
+    f"VAL No surgery (N={len(val_0)})",          f"VAL Surgery (N={len(val_1)})",
+    f"VALLADOLID No surgery (N={len(vall_0)})",  f"VALLADOLID Surgery (N={len(vall_1)})",
+    f"SALAMANCA No surgery (N={len(sala_0)})",   f"SALAMANCA Surgery (N={len(sala_1)})",
+    f"GRANADA No surgery (N={len(gran_0)})",     f"GRANADA Surgery (N={len(gran_1)})",
 ]
 
 rows_desc = []
@@ -404,11 +413,11 @@ df_desc = pd.DataFrame(rows_desc, columns=DESC_COLS)
 print("Generating inter-cohort comparison table (Kruskal-Wallis + post-hoc Mann-Whitney)...")
 
 COHORTS = [
-    ("Train",          df_train),
-    ("Val",            df_val),
-    ("Valladolid",     df_vall),
-    ("Salamanca",      df_sala),
-    ("Granada",        df_gran),
+    ("Train",      df_train),
+    ("Val",        df_val),
+    ("Valladolid", df_vall),
+    ("Salamanca",  df_sala),
+    ("Granada",    df_gran),
 ]
 COHORT_NAMES = [n for n, _ in COHORTS]
 COHORT_PAIRS = list(combinations(range(len(COHORT_NAMES)), 2))   # All C(5,2)=10 index pairs
@@ -442,7 +451,6 @@ def kw_and_posthoc(col_name, target_class):
     # KW requires at least two groups with more than one unique value
     with_variance = [(i, g) for i, g in valid if len(np.unique(g)) > 1]
     if len(with_variance) < 2:
-        # All groups constant — no possible difference
         return "1.000", 1.0, {}
 
     try:
@@ -457,7 +465,6 @@ def kw_and_posthoc(col_name, target_class):
     posthoc  = {}
 
     if kw_p < ALPHA:
-        # Post-hoc: Mann-Whitney for all cohort pairs with sufficient data
         for i, j in COHORT_PAIRS:
             gi, gj = groups[i], groups[j]
             if len(gi) < 1 or len(gj) < 1:
@@ -545,7 +552,7 @@ df_pval = pd.DataFrame(rows_pval, columns=PVAL_COLS)
 # SHEET 4 — SPEARMAN CORRELATION
 # ─────────────────────────────────────────────────────────────────────────────
 # Computes Spearman ρ for each variable against:
-#   (a) ETIQUETA  — ground truth label (consensus surgical decision)
+#   (a) ETIQUETA    — ground truth label (consensus surgical decision)
 #   (b) OBJETIVO HT — Heart Team clinical decision
 # Computed on the full Valladolid 2023 cohort (train + val).
 # Δ = |ρ_target| − |ρ_HT| quantifies divergence between AI and HT relevance.
@@ -703,6 +710,116 @@ if len(df_spear) > 0:
     plt.show()
 
 # ════════════════════════════════════════════════════════════════════════════
+# SHEET 5 — SUBGROUP ANALYSIS: Suitable for Angioplasty × Coronary Disease
+# ─────────────────────────────────────────────────────────────────────────────
+# Goal: determine whether the divergence between HT and ground truth in the
+# variable "Suitable for angioplasty" is concentrated in anatomically complex
+# subgroups (3-vessel / left main disease), where evidence from randomised
+# trials favours CABG over PCI, or uniformly distributed across disease extents.
+#
+# Subgroups defined by coronary anatomy (non-exclusive; combined rows included):
+#   · Single-vessel disease          (1 VASO)
+#   · Two-vessel disease             (2 VASOS)
+#   · Three-vessel disease           (3 VASOS)
+#   · Left main involvement          (TRONCO)
+#   · Three-vessel or left main — combined  (high-complexity reference group)
+#   · One- or two-vessel — combined         (low-complexity reference group)
+#
+# Metrics computed per subgroup (all on df_global, Valladolid 2023, N=702):
+#   · N total and N suitable for angioplasty (%)
+#   · Spearman ρ vs ground truth  + p-value
+#   · Spearman ρ vs HT decision   + p-value
+#   · Divergence Δ = |ρ_target| − |ρ_HT|
+#   · Chi-squared: angioplasty × ground truth class
+#   · Chi-squared: angioplasty × HT decision
+#
+# Reference: Mohr et al., Lancet 2013 (SYNTAX); Holm et al., Lancet 2020 (NOBLE)
+# ════════════════════════════════════════════════════════════════════════════
+print("\nGenerating subgroup analysis: Suitable for Angioplasty × Coronary Disease...")
+
+COL_ANGIO  = find_col(df_global, "SUSCEPTIBLE DE ANGIOPLASTIA")
+COL_1V     = find_col(df_global, "1 VASO")
+COL_2V     = find_col(df_global, "2 VASOS")
+COL_3V     = find_col(df_global, "3 VASOS")
+COL_TRONCO = find_col(df_global, "TRONCO")
+
+SUBGROUPS = {
+    "Single-vessel disease":                df_global[df_global[COL_1V]     == 1],
+    "Two-vessel disease":                   df_global[df_global[COL_2V]     == 1],
+    "Three-vessel disease":                 df_global[df_global[COL_3V]     == 1],
+    "Left main involvement":                df_global[df_global[COL_TRONCO] == 1],
+    "Three-vessel or left main (combined)": df_global[(df_global[COL_3V] == 1) | (df_global[COL_TRONCO] == 1)],
+    "One- or two-vessel (combined)":        df_global[(df_global[COL_1V] == 1) | (df_global[COL_2V]     == 1)],
+}
+
+rows_sub = []
+
+if all([COL_ANGIO, COL_1V, COL_2V, COL_3V, COL_TRONCO, col_ht]):
+    for name, df_sub in SUBGROUPS.items():
+        n_total = len(df_sub)
+        n_angio = int((df_sub[COL_ANGIO] == 1).sum())
+
+        # Guard: subgroup too small or angioplasty column constant → skip tests
+        if n_total == 0 or df_sub[COL_ANGIO].nunique() < 2:
+            rows_sub.append({
+                "Subgroup":                      name,
+                "N total":                       n_total,
+                "N suitable for angioplasty":    n_angio,
+                "% suitable for angioplasty":    "N/A",
+                "ρ vs Ground Truth":             "N/A",
+                "p-value vs Ground Truth":       "N/A",
+                "ρ vs HT Decision":              "N/A",
+                "p-value vs HT Decision":        "N/A",
+                "Divergence (Δ)":               "N/A",
+                "Chi² p-value (angio vs class)": "N/A",
+                "Chi² p-value (angio vs HT)":    "N/A",
+            })
+            continue
+
+        x   = pd.to_numeric(df_sub[COL_ANGIO], errors='coerce').fillna(0)
+        y_t = df_sub['ETIQUETA']
+        y_h = df_sub[col_ht]
+
+        # Spearman correlations
+        rho_t, p_t = spearmanr(x, y_t)
+        rho_h, p_h = spearmanr(x, y_h)
+
+        # Chi-squared: angioplasty × ground truth class
+        try:
+            tbl_t = pd.crosstab(df_sub[COL_ANGIO], df_sub['ETIQUETA'])
+            _, p_chi_t, _, _ = chi2_contingency(tbl_t, correction=False)
+        except Exception:
+            p_chi_t = np.nan
+
+        # Chi-squared: angioplasty × HT decision
+        try:
+            tbl_h = pd.crosstab(df_sub[COL_ANGIO], df_sub[col_ht])
+            _, p_chi_h, _, _ = chi2_contingency(tbl_h, correction=False)
+        except Exception:
+            p_chi_h = np.nan
+
+        rows_sub.append({
+            "Subgroup":                      name,
+            "N total":                       n_total,
+            "N suitable for angioplasty":    n_angio,
+            "% suitable for angioplasty":    f"{n_angio / n_total * 100:.1f}%",
+            "ρ vs Ground Truth":             round(rho_t, 3),
+            "p-value vs Ground Truth":       format_p(p_t),
+            "ρ vs HT Decision":              round(rho_h, 3),
+            "p-value vs HT Decision":        format_p(p_h),
+            "Divergence (Δ)":               round(abs(abs(rho_t) - abs(rho_h)), 3),
+            "Chi² p-value (angio vs class)": format_p(p_chi_t),
+            "Chi² p-value (angio vs HT)":    format_p(p_chi_h),
+        })
+
+    df_sub_angio = pd.DataFrame(rows_sub)
+    print(df_sub_angio.to_string(index=False))
+
+else:
+    df_sub_angio = pd.DataFrame()
+    print("  ⚠ One or more required columns not found — subgroup analysis skipped.")
+
+# ════════════════════════════════════════════════════════════════════════════
 # EXPORT ALL SHEETS TO EXCEL
 # ════════════════════════════════════════════════════════════════════════════
 print(f"\nSaving all sheets to '{OUTPUT_FILE}'...")
@@ -712,8 +829,11 @@ with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl', mode='a', if_sheet_exists='r
     df_kw.to_excel(   writer, sheet_name='Inter_Cohort_Comparison', index=False)
     df_pval.to_excel( writer, sheet_name='P_Values',                index=False)
     df_spear.to_excel(writer, sheet_name='Spearman_Correlation',    index=False)
+    if not df_sub_angio.empty:
+        df_sub_angio.to_excel(writer, sheet_name='Angioplasty_Subgroup', index=False)
 
-print("Sheets written: Descriptive_Table | Inter_Cohort_Comparison | P_Values | Spearman_Correlation")
+print("Sheets written: Descriptive_Table | Inter_Cohort_Comparison | P_Values | "
+      "Spearman_Correlation | Angioplasty_Subgroup")
 
 # ════════════════════════════════════════════════════════════════════════════
 # FIGURE C — INTRA-CLASS P-VALUE BAR CHART
@@ -790,10 +910,10 @@ except Exception as e:
 
 # Variables used for stratification during split creation
 STRATIFICATION_VARS = [
-    ("Age",                         "EDAD",                         "cont"),
-    ("Critical preoperative status","ESTADO PREOPERATORIO CRÍTICO",  "bin"),
-    ("Aortic + valve surgery",      "CIRUGIA DE AORTA + VALVULAR",  "bin"),
-    ("Bivalvular + coronary surgery","BIVALVULAR + CORONARIO",       "bin"),
+    ("Age",                          "EDAD",                        "cont"),
+    ("Critical preoperative status", "ESTADO PREOPERATORIO CRÍTICO", "bin"),
+    ("Aortic + valve surgery",       "CIRUGIA DE AORTA + VALVULAR",  "bin"),
+    ("Bivalvular + coronary surgery","BIVALVULAR + CORONARIO",        "bin"),
 ]
 
 fig, axes = plt.subplots(2, 2, figsize=(11, 8))
@@ -820,8 +940,8 @@ for ax, (label, col, vtype) in zip(axes, STRATIFICATION_VARS):
                 pv = v
                 break
 
-    p_label = (f'p = {pv:.4f}' if not np.isnan(pv) and pv >= 0.001
-               else ('p < 0.001' if not np.isnan(pv) else 'p = N/A'))
+    p_label  = (f'p = {pv:.4f}' if not np.isnan(pv) and pv >= 0.001
+                else ('p < 0.001' if not np.isnan(pv) else 'p = N/A'))
     p_colour = '#2ca02c' if not np.isnan(pv) and pv >= ALPHA else '#d62728'
 
     if vtype == "cont":
@@ -875,7 +995,7 @@ plt.savefig('Verification_TrainVal_Partition.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 # ════════════════════════════════════════════════════════════════════════════
-# SHEET 5 — GLOBAL CLASSIFIER RANKING (Borda count)
+# SHEET 6 — GLOBAL CLASSIFIER RANKING (Borda count)
 # ─────────────────────────────────────────────────────────────────────────────
 # Position-based scoring across 6 individual rankings:
 #   Local methodology, Mixed methodology, and LOCO × 4 cohorts.
@@ -884,7 +1004,6 @@ plt.show()
 # ════════════════════════════════════════════════════════════════════════════
 print("\nComputing global classifier ranking (Borda count)...")
 
-# ── Helpers for robust column name handling ───────────────────────────────────
 
 def get_col(df, candidates):
     """Return the first column name from candidates found in df, or raise KeyError."""
@@ -914,10 +1033,10 @@ def ranking_from_rows(df):
 
 # ── Load and normalise ranking sheets ─────────────────────────────────────────
 df_local  = normalise(pd.read_excel(RANKING_EXCEL, sheet_name='Local'))
-df_mixed = normalise(pd.read_excel(RANKING_EXCEL, sheet_name='Mixed'))
+df_mixed  = normalise(pd.read_excel(RANKING_EXCEL, sheet_name='Mixed'))
 df_loco   = normalise(pd.read_excel(RANKING_EXCEL, sheet_name='LOCO'))
 
-ranking_local  = ranking_from_rows(df_local)
+ranking_local = ranking_from_rows(df_local)
 ranking_mixed = ranking_from_rows(df_mixed)
 
 # LOCO sheet: section headers are rows where AUC is non-numeric
