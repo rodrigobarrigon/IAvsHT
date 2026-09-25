@@ -8,13 +8,14 @@ Developed as the Final Degree Project (*Trabajo de Fin de Grado*, TFG) in Biomed
 
 ## Overview
 
-The pipeline trains and evaluates 12 supervised classifiers across three independent data partitioning strategies, selecting a final model via a calibrated Voting Ensemble. Explainability is provided through SHAP (SHapley Additive exPlanations). The three strategies are designed to assess generalisability under progressively stricter conditions:
+The pipeline trains and evaluates 12 supervised classifiers across three independent data partitioning strategies, selecting a final model via a calibrated Voting Ensemble. Explainability is provided through SHAP (SHapley Additive exPlanations). The three evaluation strategies are designed to assess generalisability under progressively stricter conditions, and a fourth strategy (**All**) builds the definitive model for prospective use on new patients:
 
 | Strategy | Description |
 |---|---|
 | **Local** | Train/val on a single centre (HCUV 2023), test on three external cohorts |
-| **Mixed** | Fully pooled stratified split across all four cohorts |
+| **Mixed** | Fully pooled stratified split across all four cohorts (70% train / 15% val / 15% test) |
 | **LOCO** | Leave-One-Center-Out cross-validation |
+| **All** | Fully pooled stratified split across all four cohorts with no internal test set (85% train / 15% val), for prospective testing on new, real patients |
 
 The multicentric dataset comprises **1,164 patients** from three Spanish university hospitals: Hospital Clínico Universitario de Valladolid (2023 and 2025 cohorts), Hospital Universitario Virgen de las Nieves (Granada), and Hospital Clínico Universitario de Salamanca.
 
@@ -42,7 +43,8 @@ IAvsHT/
 └── 3_models/
     ├── IAvsHT_local.py                        # Local training and validation strategy
     ├── IAvsHT_mixed.py                        # Mixed (pooled) partitioning strategy
-    └── IAvsHT_LOCO.py                         # Leave-One-Center-Out strategy
+    ├── IAvsHT_LOCO.py                         # Leave-One-Center-Out strategy
+    └── IAvsHT_all.py                          # All-cohort training strategy (final model for prospective use)
 ```
 
 ---
@@ -106,6 +108,7 @@ python 2_statistical_analysis/IAvsHT_Normality_Homoscedasticity.py
 python 3_models/IAvsHT_local.py
 python 3_models/IAvsHT_mixed.py
 python 3_models/IAvsHT_LOCO.py
+python 3_models/IAvsHT_all.py
 
 # Step 5 — Statistical analysis and global classifier ranking
 python 2_statistical_analysis/IAvsHT_Statistical_Analysis.py
